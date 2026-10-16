@@ -131,4 +131,5 @@ demo only; it does not use a wallet or make paid requests.
 Licensing
 ---------
 
-No open-source license has been selected for this repository.
+MIT licensed; see ``LICENSE``. This covers this buyer client's source code,
+not the separate service, its data or its API usage terms.
