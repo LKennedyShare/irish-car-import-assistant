@@ -154,6 +154,8 @@ The initial published version is ``0.1.1``; do not reuse that release tag.
 
 ``discovery.yml`` runs nightly at 03:23 UTC and supports manual dispatch.
 It uses Python's standard library only, no SDK, wallet, secrets or funds.
+An independent job installs the published PyPI package and runs only its offline
+synthetic demo, outside a repository checkout; it never invokes a paid command.
 It reads public health/OpenAPI/cards/homepage/buyers metadata and sends one
 unsigned paid REST quote probe and one empty-arguments MCP quote probe.
 It never calls the free preview, signs, pays, changes listings or follows
