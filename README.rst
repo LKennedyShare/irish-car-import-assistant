@@ -7,6 +7,7 @@ landed import costs and explains the result.
 
 * Free preview first; no wallet or LLM key needed.
 * Guided CLI, structured flags, JSON output and a reusable Python function.
+* Optional real LangChain and OpenAI Agents SDK tools, offline-first.
 * Optional full results use explicitly authorized x402 payments, capped at
   **0.02 USDC per invocation**.
 * No car purchases, import execution, backend code, databases or credentials.
@@ -122,7 +123,7 @@ Development
    cd irish-car-import-assistant
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
-   python -m pip install -e ".[test]"
+   python -m pip install -e ".[test,langchain,openai]"
    python -m pytest -q
 
 Tests mock HTTP and payments. Test/release jobs run tests and the offline
@@ -131,7 +132,7 @@ demo only; they do not use a wallet or make paid requests.
 Release and unpaid discovery automation
 ---------------------------------------
 
-Version 0.1.1 is published on PyPI. Trusted publishing is configured for this
+Version 0.2.0 adds optional framework adapters. Trusted publishing is configured for this
 repository without stored API tokens. The publisher identity is:
 
 * PyPI project: ``irish-car-import-assistant``
@@ -151,6 +152,8 @@ publication, not a PR or manual workflow run. Tags must exactly match
 PyPI versions are immutable: future releases need a new version and matching
 tag. Duplicate uploads fail rather than silently skipping existing files.
 The initial published version is ``0.1.1``; do not reuse that release tag.
+Release ``0.2.0`` must use ``v0.2.0``; published versions and tags must not be
+overwritten or reused.
 
 ``discovery.yml`` runs nightly at 03:23 UTC and supports manual dispatch.
 It uses Python's standard library only, no SDK, wallet, secrets or funds.
@@ -182,3 +185,175 @@ Licensing
 
 MIT licensed; see ``LICENSE``. This covers this buyer client's source code,
 not the separate service, its data or its API usage terms.
+
+Framework integration (0.2.0)
+-----------------------------
+
+Install only the adapter your application needs, or both:
+
+.. code-block:: powershell
+
+   python -m pip install "irish-car-import-assistant[langchain,openai]"
+
+The extras use ``langchain-core>=1.6,<2`` and ``openai-agents>=0.24,<1``.
+Base imports and offline demos do not import either SDK. Missing extras produce
+an installation hint; broken transitive SDK imports are not hidden.
+
+``CarImportTools`` exposes ``offline_demo()``, ``preview(...)`` and
+``quote(...)``. Vehicle arguments are ``make``, ``model``, ``year``,
+``mileage_km``, ``fuel_type``, ``co2_g_km``, optional ``transmission=None`` and
+``origin="ANY"``. They use the same validation and normalization as
+``compare_car``. Results are JSON-serializable dictionaries; errors propagate,
+not fabricated comparisons. A preview consumes the service's shared free quota.
+A quote calls the full endpoint with payment disabled, even if a wallet exists.
+
+``as_langchain_tools()`` creates real ``StructuredTool.from_function`` tools
+with strict Pydantic argument schemas and synchronous/asynchronous handlers.
+``as_openai_tools()`` creates real ``agents.function_tool`` tools with strict
+schemas and ``failure_error_function=None``. Both reject unexpected arguments.
+Async handlers offload synchronous HTTP work via ``asyncio.to_thread``.
+Factory construction makes no model, HTTP, payment or tracing calls. This module
+does not record PII; configure the host application's SDK tracing/logging and
+retention separately, and do not include personal information in car fields.
+
+Run the checked-in local examples from a source checkout:
+
+.. code-block:: powershell
+
+   python examples/framework_demo.py --framework langchain
+   python examples/framework_demo.py --framework openai
+
+Both invoke the actual framework tool locally and print labelled
+``SYNTHETIC_OFFLINE_DEMO`` output. Neither needs a model-provider key, wallet or
+network. Only an explicit ``--live`` invokes the free preview and consumes
+quota. The examples never invoke a model or request payment.
+
+For local invocation in an existing application:
+
+.. code-block:: python
+
+   from irish_car_import_assistant import CarImportTools
+
+   session = CarImportTools()  # Retain this instance for the entire session.
+   tools = {tool.name: tool for tool in session.as_langchain_tools()}
+   synthetic = tools["offline_demo"].invoke({})
+
+An OpenAI SDK tool can also be invoked locally without ``Agent`` or ``Runner``:
+
+.. code-block:: python
+
+   import asyncio
+   from agents.tool_context import ToolContext
+   from irish_car_import_assistant import CarImportTools
+
+   session = CarImportTools()
+   demo = session.as_openai_tools()[0]
+   context = ToolContext(
+       context=None, tool_name=demo.name,
+       tool_call_id="local-demo", tool_arguments="{}",
+   )
+   synthetic = asyncio.run(demo.on_invoke_tool(context, "{}"))
+
+Actual agent construction belongs to the host application. LangChain's
+``create_agent`` additionally requires the application's ``langchain`` and
+chosen provider packages; the adapter extra installs only ``langchain-core``:
+
+.. code-block:: python
+
+   from langchain.agents import create_agent
+   from irish_car_import_assistant import CarImportTools
+
+   session = CarImportTools()
+
+   def build_langchain_agent(configured_chat_model):
+       return create_agent(
+           model=configured_chat_model,
+           tools=session.as_langchain_tools(),
+           system_prompt="Compare car import costs. Do not invent vehicle CO2.",
+       )
+
+.. code-block:: python
+
+   from agents import Agent, RunConfig
+   from irish_car_import_assistant import CarImportTools
+
+   session = CarImportTools()
+
+   def build_openai_agent(model_id):
+       return Agent(
+           name="Irish car import adviser",
+           model=model_id,
+           instructions="Use the car tools. Never invent vehicle details.",
+           tools=session.as_openai_tools(),
+       )
+
+   run_config = RunConfig(tracing_disabled=True)
+   # The host may later call Runner with its configured model and run_config.
+   # No Agent/Runner or model invocation is performed at import time here.
+
+Model execution is separate, needs the host's provider configuration and may
+incur provider charges. Tool factories do not grant automatic discovery,
+installation, distribution or guaranteed reach to other agents.
+
+Operator-only paid policy
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default neither adapter exposes ``paid_full``. The model never receives
+payment switches, wallet/key fields, caps, approval statements or a base URL as
+tool arguments. A base URL is trusted operator constructor configuration only.
+To add ``paid_full``, supply a **synchronous operator-owned callable** as
+``approval_policy``. It sees an immutable copy of validated, normalized vehicle
+parameters, not a model's assertion of consent, and must return literal
+``True``. Truthy values, awaitables, exceptions and denied requests do not
+reserve budget or make network calls.
+
+For autonomous, non-human approval, explicitly allowlist an exact request in
+operator code (not prompts, model output or untrusted listing content):
+
+.. code-block:: python
+
+   from irish_car_import_assistant import CarImportTools
+
+   ALLOWED = frozenset({
+       tuple(sorted({
+           "make": "Volkswagen", "model": "Golf", "year": 2023,
+           "mileage_km": 50000, "fuel_type": "Petrol", "co2_g_km": 125,
+           "origin": "GB",
+       }.items())),
+   })
+
+   def approved_vehicle(vehicle):
+       return tuple(sorted(vehicle.items())) in ALLOWED
+
+   paid_session = CarImportTools(
+       approval_policy=approved_vehicle,
+       max_usdc="0.02", max_total_usdc="0.02", max_paid_calls=1,
+   )
+   paid_tools = paid_session.as_openai_tools()  # Or as_langchain_tools().
+   # Only a later paid_full invocation matching ALLOWED can reach compare_car.
+
+Normalization trims make/model text (preserving case), canonicalizes fuel,
+uppercases origin and title-cases transmission. Unspecified transmission is
+omitted from the policy mapping. This allowlist therefore approves GB only,
+not ANY/NI or a request with an additional transmission constraint. It does not
+approve a purchase or import. Keep ``X402_CLIENT_PRIVATE_KEY`` only in the
+operator's wallet environment, never the model context.
+
+One retained object defaults to **one paid reservation**, capped at
+**0.02 USDC total service fees**. Both per-call ``max_usdc`` and cumulative
+``max_total_usdc`` must be positive and at most 0.02. ``max_paid_calls`` can be
+raised only within that cumulative cap. The entire per-call cap is reserved
+under a thread lock before calling the existing ``compare_car`` payment path;
+concurrent calls cannot double-reserve. Policies run outside the budget lock;
+reentrant paid approval is rejected. No retry loop or duplicate payment/signing
+implementation is added.
+
+Reservations consume both the call allowance and full cap even on failure,
+timeout, cancellation or unknown settlement, with no refunds or automatic
+retries. An unconfirmed settlement is not success. Read-only
+``reserved_calls`` and ``reserved_usdc`` expose current accounting.
+The budget is **per-object, in-memory only**, not durable, daily or account-wide.
+Recreating an object resets it: **never recreate it per tool call**. Production
+operators need a durable, atomic policy/budget across sessions, processes and
+restarts; these local limits are not a substitute. Model-provider charges,
+wallet funding and other external costs are outside this service-fee cap.

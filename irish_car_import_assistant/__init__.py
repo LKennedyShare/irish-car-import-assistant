@@ -1,9 +1,13 @@
 """Public buyer integration; no backend, database or model-provider credentials."""
 
-__all__ = ["compare_car"]
+__all__ = ["compare_car", "CarImportTools"]
 
 
 def __getattr__(name):
+    if name == "CarImportTools":
+        from .tools import CarImportTools
+
+        return CarImportTools
     if name == "compare_car":
         from .assistant import compare_car
 
