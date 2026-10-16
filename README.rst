@@ -16,7 +16,7 @@ It calls the public `UK Ireland Used Car Import Agent
 deterministic buyer integration, not an autonomous LLM or an A2A-protocol server.
 
 Install and try offline
-----------------------
+-----------------------
 
 Requires Python 3.12 or later. From a fresh terminal:
 
@@ -65,7 +65,7 @@ savings or shortfall, transport, customs, VAT, VRT, NOx and other costs.
 Individual listing links are reserved for the full paid result.
 
 Inspect or explicitly pay for full results
------------------------------------------
+------------------------------------------
 
 Repeat a structured command with ``--full`` to inspect its quote without paying.
 An ordinary MCP connection does not supply a wallet or payment capability.
@@ -125,8 +125,57 @@ Development
    python -m pip install -e ".[test]"
    python -m pytest -q
 
-Tests mock HTTP and payments. The GitHub workflow runs tests and the offline
-demo only; it does not use a wallet or make paid requests.
+Tests mock HTTP and payments. Test/release jobs run tests and the offline
+demo only; they do not use a wallet or make paid requests.
+
+Release and unpaid discovery automation
+---------------------------------------
+
+PyPI publication is **pending owner authorization**, not configured or published.
+Keep using the GitHub installation above until the first PyPI publication.
+The owner must sign in at https://pypi.org/manage/account/publishing/ and create
+this one-time pending trusted publisher:
+
+* PyPI project: ``irish-car-import-assistant``
+* GitHub owner: ``LKennedyShare``
+* Repository: ``irish-car-import-assistant``
+* Workflow filename: ``publish.yml``
+* Environment: ``pypi`` (exact, fixed GitHub environment name)
+
+The owner must also create that GitHub environment. No API token or password
+is used. No manual approval per release is required by default; environment
+protection rules can impose approval if the owner chooses.
+After setup, publishing a GitHub release tagged ``v0.1.1`` builds the current
+version's wheel and sdist, runs mocked tests, the installed offline CLI and
+strict Twine checks, then publishes via OIDC. Only ``release.published`` triggers
+publication, not a PR or manual workflow run. Tags must exactly match
+``v<pyproject.version>`` and package identity is checked before build.
+PyPI versions are immutable: future releases need a new version and matching
+tag. Duplicate uploads fail rather than silently skipping existing files.
+Current version remains ``0.1.1`` for the first publication.
+
+``discovery.yml`` runs nightly at 03:23 UTC and supports manual dispatch.
+It uses Python's standard library only, no SDK, wallet, secrets or funds.
+It reads public health/OpenAPI/cards/homepage/buyers metadata and sends one
+unsigned paid REST quote probe and one empty-arguments MCP quote probe.
+It never calls the free preview, signs, pays, changes listings or follows
+response URLs. The car service uses REST/MCP, **not the A2A protocol**.
+All requests identify as ``scout-distribution-monitor``: diagnostics, not
+customers, purchases, demand or independent adoption.
+
+Run locally with ``python scripts/check_discovery.py --service car --output discovery.json``.
+The JSON, Actions artifact and step summary contain only fixed check names and
+statuses, never response bodies, headers or private data. Requests refuse
+redirects, cap bodies at 2 MB and use 15-second socket timeouts; failures exit
+nonzero. A missing PyPI project is explicitly ``pending``, without masking
+service failures. After publication add ``--require-pypi`` to the workflow's
+monitor command to enforce PyPI availability and repository/MIT/name metadata.
+The homepage and ``/buyers.txt`` must link this public client repository.
+
+GitHub schedules can be delayed or dropped and public-repository schedules
+may be disabled after 60 days without repository activity. This is not
+guaranteed continuous uptime monitoring; review Actions and re-enable schedules
+when needed. No artificial activity, stars or promotional posting is generated.
 
 Licensing
 ---------
