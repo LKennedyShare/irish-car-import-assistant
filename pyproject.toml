@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "irish-car-import-assistant"
+version = "0.1.0"
+description = "Free-first UK and Northern Ireland to Ireland car-import comparison client"
+readme = {file = "README.rst", content-type = "text/x-rst"}
+requires-python = ">=3.12"
+authors = [{name = "LKennedyShare"}]
+dependencies = [
+    "httpx>=0.28,<0.29",
+    "x402[evm]>=2.25,<3",
+    "eth-account>=0.14,<0.15",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<10"]
+
+[project.scripts]
+car-import-assistant = "irish_car_import_assistant.assistant:main"
+
+[project.urls]
+Repository = "https://github.com/LKennedyShare/irish-car-import-assistant"
+Service = "https://irish-auto-arbitrage-production.up.railway.app/"
+
+[tool.setuptools.packages.find]
+include = ["irish_car_import_assistant*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
